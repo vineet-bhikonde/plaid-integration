@@ -4,8 +4,8 @@ Plaid integration app exposes rest end points for fetching details about the use
 
 **Setup** 
 
-Clone the repository : `git clone https://github.com/vineet-bhikonde/plaid-app`
-cd plaid-app
+Clone the repository : `git clone https://github.com/vineet-bhikonde/plaid-integration`
+cd plaid-integration
 
 Creating the virtual environment : `python3 -m venv plaid-env`
 
