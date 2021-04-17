@@ -18,18 +18,6 @@ class BilledProductSerializer(serializers.ModelSerializer):
         fields = ['name']
 
 
-class ItemsSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    available_products = serializers.StringRelatedField(many=True, read_only=True)
-    billed_products = serializers.StringRelatedField(many=True, read_only=True)
-
-    class Meta:
-        model = Item
-        fields = ['item', 'access_token', 'consent_expiration_time', 'error', 'institution_id',
-                  'user', 'available_products', 'billed_products', 'update_type', 'webhook']
-        depth = 1
-
-
 class BalanceSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -50,3 +38,24 @@ class AccountSerializer(serializers.ModelSerializer):
         balance_object = Balance.objects.create(**balance)
         account = Account.objects.create(balances=balance_object, **validated_data)
         return account
+
+
+class ItemSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    available_products = serializers.StringRelatedField(many=True, read_only=True)
+    billed_products = serializers.StringRelatedField(many=True, read_only=True)
+
+    class Meta:
+        model = Item
+        fields = ['item', 'access_token', 'consent_expiration_time', 'error', 'institution_id',
+                  'user', 'available_products', 'billed_products', 'update_type', 'webhook', 'account_set']
+        depth = 2
+
+
+class ItemAccountSerializer(serializers.Serializer):
+    item_id = serializers.CharField(source='item')
+    account = AccountSerializer(many=True, source='account_set')
+
+
+class AccessTokenRequestSerializer(serializers.Serializer):
+    public_token = serializers.CharField(max_length=500)

@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from item.models import Item, Account
-from .serializers import AccountSerializer
+from .serializers import AccountSerializer, ItemSerializer, ItemAccountSerializer, AccessTokenRequestSerializer
 from .tasks import fetch_item_meta_data, fetch_item_account_data
 
 client = plaid.Client(
@@ -19,9 +19,10 @@ class AccessTokenApiView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def post(self, request):
-        public_token = request.data['public_token']
+        access_token_request_serializer = AccessTokenRequestSerializer(data=request.data)
+        access_token_request_serializer.is_valid(raise_exception=True)
         try:
-            exchange_token = client.Item.public_token.exchange(public_token)
+            exchange_token = client.Item.public_token.exchange(access_token_request_serializer.data.get('public_token'))
         except plaid.errors.PlaidError as e:
             if e.code == 'INVALID_PUBLIC_TOKEN':
                 return Response(data={'error': e.message}, status=401)
@@ -39,7 +40,8 @@ class AccountApiView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
-        item = Item.objects.get(user=request.user)
-        accounts = Account.objects.filter(item=item)
-        serializer = AccountSerializer(accounts, many=True)
+        item = Item.objects.filter(user=request.user)
+        if not item:
+            return Response(data={'error': 'No Items available.'}, status=400)
+        serializer = ItemAccountSerializer(item, many=True)
         return Response(serializer.data)
