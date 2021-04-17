@@ -1,10 +1,13 @@
+import datetime
+
 import plaid
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from item.models import Item, Account
-from .serializers import AccountSerializer, ItemSerializer, ItemAccountSerializer, AccessTokenRequestSerializer
+from .serializers import AccountSerializer, ItemSerializer, ItemAccountSerializer, AccessTokenRequestSerializer, \
+    ItemTransactionSerializer, TransactionDetailSerializer
 from .tasks import fetch_item_meta_data, fetch_item_account_data
 
 client = plaid.Client(
@@ -45,3 +48,30 @@ class AccountApiView(APIView):
             return Response(data={'error': 'No Items available.'}, status=400)
         serializer = ItemAccountSerializer(item, many=True)
         return Response(serializer.data)
+
+
+class AccountTransactionApiView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        item = Item.objects.filter(user=request.user)
+        if not item:
+            return Response(data={'error': 'No Items available to display transactions.'}, status=400)
+        serializer = ItemTransactionSerializer(item, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        start_date = '{:%Y-%m-%d}'.format(datetime.datetime.now() + datetime.timedelta(-15))
+        end_date = '{:%Y-%m-%d}'.format(datetime.datetime.now())
+        try:
+            items = Item.objects.filter(user=request.user)
+            if items:
+                for item in items:
+                    transactions_response = client.Transactions.get(item.access_token, start_date, end_date)
+                    transaction_serializer = TransactionDetailSerializer(many=True,
+                                                                         data=transactions_response['transactions'])
+                    transaction_serializer.is_valid(raise_exception=True)
+                    transaction_serializer.save()
+        except plaid.errors.PlaidError as e:
+            return Response(data={'error': e.message}, status=400)
+        return Response(data={'message': 'Transaction data fetched.'}, status=201)

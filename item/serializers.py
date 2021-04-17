@@ -1,7 +1,8 @@
 from rest_framework import serializers
 
 from core.serializers import UserSerializer
-from item.models import Account, Balance, AvailableProduct, BilledProduct, Item
+from item.models import Account, Balance, AvailableProduct, BilledProduct, Item, TransactionCategory, TransactionDetail, \
+    TransactionLocation, TransactionPaymentMeta
 
 
 class AvailableProductSerializer(serializers.ModelSerializer):
@@ -52,6 +53,54 @@ class ItemSerializer(serializers.ModelSerializer):
         depth = 2
 
 
+
+
+class TransactionCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransactionCategory
+        fields = ['name']
+
+
+class TransactionLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransactionLocation
+        exclude = ['id']
+
+
+class TransactionPaymentMetaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransactionPaymentMeta
+        exclude = ['id']
+
+
+class TransactionDetailSerializer(serializers.ModelSerializer):
+    category = serializers.ListField(write_only=True)
+    location = TransactionLocationSerializer()
+    payment_meta = TransactionPaymentMetaSerializer()
+    account_id = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = TransactionDetail
+        exclude = ['id', 'account']
+
+    def create(self, validated_data):
+        payment_meta = validated_data.pop('payment_meta')
+        location = validated_data.pop('location')
+        account_id = validated_data.pop('account_id')
+        category_details = validated_data.pop('category')
+        payment_meta_object = TransactionPaymentMeta.objects.create(**payment_meta)
+        location_object = TransactionLocation.objects.create(**location)
+        account_object = Account.objects.get(account_id=account_id)
+        transaction_detail_object = TransactionDetail.objects.create(location=location_object,
+                                                                     payment_meta=payment_meta_object,
+                                                                     account=account_object,
+                                                                     **validated_data)
+        for category in category_details:
+            category_object, created = TransactionCategory.objects.get_or_create(name=category)
+            transaction_detail_object.category.add(category_object)
+        return transaction_detail_object
+
+
 class ItemAccountSerializer(serializers.Serializer):
     item_id = serializers.CharField(source='item')
     account = AccountSerializer(many=True, source='account_set')
@@ -59,3 +108,13 @@ class ItemAccountSerializer(serializers.Serializer):
 
 class AccessTokenRequestSerializer(serializers.Serializer):
     public_token = serializers.CharField(max_length=500)
+
+
+class AccountTransactionSerializer(serializers.Serializer):
+    account_id = serializers.CharField()
+    transactions = TransactionDetailSerializer(many=True)
+
+
+class ItemTransactionSerializer(serializers.Serializer):
+    item_id = serializers.CharField(source='item')
+    transactions = AccountTransactionSerializer(many=True, source='account_set')
