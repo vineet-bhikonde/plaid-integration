@@ -31,6 +31,18 @@ class Item(models.Model):
     def __str__(self):
         return self.user.username + "\t" + self.item
 
+
+class Balance(models.Model):
+    available = models.FloatField(default=0.0, null=True)
+    current = models.FloatField(default=0.0, null=True)
+    iso_currency_code = models.CharField(max_length=10)
+    limit = models.FloatField(null=True)
+    unofficial_currency_code = models.CharField(max_length=10, null=True, blank=True)
+
+    def __str__(self):
+        return self.account.account_id + '\t' + self.account.name
+
+
 class Account(models.Model):
     account_id = models.CharField(max_length=100, null=False, unique=True)
     mask = models.CharField(max_length=10)
@@ -39,18 +51,7 @@ class Account(models.Model):
     subtype = models.CharField(max_length=100)
     type = models.CharField(max_length=100)
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
+    balances = models.OneToOneField(Balance, on_delete=models.CASCADE, default=None)
 
     def __str__(self):
         return 'Item id:' + self.item.item + '\t Account Id:' + self.account_id
-
-
-class Balance(models.Model):
-    available = models.FloatField(default=0.0, null=True)
-    current = models.FloatField(default=0.0, null=True)
-    iso_currency_code = models.CharField(max_length=10)
-    limit = models.FloatField(null=True)
-    unofficial_currency_code = models.CharField(max_length=10, null=True, blank=True)
-    account = models.OneToOneField(Account, on_delete=models.CASCADE, primary_key=True)
-
-    def __str__(self):
-        return self.account.account_id + '\t' + self.account.name

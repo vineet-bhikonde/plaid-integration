@@ -20,8 +20,8 @@ class BilledProductSerializer(serializers.ModelSerializer):
 
 class ItemsSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
-    available_products = AvailableProductSerializer(many=True, read_only=True)
-    billed_products = BilledProductSerializer(many=True, read_only=True)
+    available_products = serializers.StringRelatedField(many=True, read_only=True)
+    billed_products = serializers.StringRelatedField(many=True, read_only=True)
 
     class Meta:
         model = Item
@@ -38,20 +38,15 @@ class BalanceSerializer(serializers.ModelSerializer):
 
 
 class AccountSerializer(serializers.ModelSerializer):
-    balances = BalanceSerializer(source='account')
-    item = ItemsSerializer(read_only=True)
+    balances = BalanceSerializer()
 
     class Meta:
         model = Account
-        fields = ['account_id', 'mask', 'name', 'official_name', 'subtype', 'type', 'item', 'balances']
+        fields = ['account_id', 'mask', 'name', 'official_name', 'subtype', 'type', 'balances']
 
     def create(self, validated_data):
-        balance = validated_data.pop('account')
+        balance = validated_data.pop('balances')
         validated_data['item'] = self.context.get('item')
-        # account_id = validated_data.get('account_id')
-        # account, created = Account.objects.update_or_create(account_id=validated_data.get('account_id'),
-        #                                             defaults=validated_data)
-        account = Account.objects.create(**validated_data)
-        balance['account'] = account
-        Balance.objects.create(**balance)
+        balance_object = Balance.objects.create(**balance)
+        account = Account.objects.create(balances=balance_object, **validated_data)
         return account

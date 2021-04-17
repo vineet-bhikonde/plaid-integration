@@ -3,7 +3,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from item.models import Item
+from item.models import Item, Account
+from .serializers import AccountSerializer
 from .tasks import fetch_item_meta_data, fetch_item_account_data
 
 client = plaid.Client(
@@ -32,3 +33,13 @@ class AccessTokenApiView(APIView):
         fetch_item_meta_data.delay(item.item)
         fetch_item_account_data.delay(item.item)
         return Response(exchange_token)
+
+
+class AccountApiView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        item = Item.objects.get(user=request.user)
+        accounts = Account.objects.filter(item=item)
+        serializer = AccountSerializer(accounts, many=True)
+        return Response(serializer.data)
