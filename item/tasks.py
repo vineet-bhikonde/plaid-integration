@@ -3,13 +3,9 @@ from celery import shared_task
 
 from item.models import Item, AvailableProduct, BilledProduct
 from item.serializers import AccountSerializer
+from plaid_integration.PlaidClient import PlaidClient
 
-client = plaid.Client(
-            client_id="6077aff00b1c9e00111702d8",
-            secret="842032c8317c41824f993a2c23d81f",
-            environment="sandbox",
-            api_version="2020-09-14"
-        )
+client = PlaidClient.get_instance()
 
 
 @shared_task

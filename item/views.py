@@ -6,16 +6,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from item.models import Item, Account
+from plaid_integration.PlaidClient import PlaidClient
 from .serializers import AccountSerializer, ItemSerializer, ItemAccountSerializer, AccessTokenRequestSerializer, \
     ItemTransactionSerializer, TransactionDetailSerializer
 from .tasks import fetch_item_meta_data, fetch_item_account_data
 
-client = plaid.Client(
-            client_id="6077aff00b1c9e00111702d8",
-            secret="842032c8317c41824f993a2c23d81f",
-            environment="sandbox",
-            api_version="2020-09-14"
-        )
+client = PlaidClient.get_instance()
 
 
 class AccessTokenApiView(APIView):

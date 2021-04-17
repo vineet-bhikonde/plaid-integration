@@ -105,6 +105,6 @@ class TransactionDetail(models.Model):
     pending = models.BooleanField(default=False)
     pending_transaction_id = models.BigIntegerField(null=True)
     transaction_code = models.IntegerField(null=True)
-    transaction_id = models.CharField(max_length=500, null=True)
+    transaction_id = models.CharField(max_length=500, unique=True, default=0)
     transaction_type = models.CharField(max_length=50, null=True)
     unofficial_currency_code = models.CharField(max_length=10, null=True)
