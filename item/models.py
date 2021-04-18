@@ -23,7 +23,7 @@ class Item(models.Model):
     error = models.CharField(max_length=100, null=True)
     institution_id = models.CharField(max_length=10, null=True)
     update_type = models.CharField(max_length=50, null=True)
-    webhook = models.CharField(max_length=100, null=True)
+    webhook = models.CharField(max_length=100, null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     available_products = models.ManyToManyField(AvailableProduct)
     billed_products = models.ManyToManyField(BilledProduct)

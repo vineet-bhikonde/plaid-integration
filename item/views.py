@@ -6,9 +6,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from item.models import Item, Account
+from item.models import Item, Account, TransactionDetail
 from plaid_integration.PlaidClient import PlaidClient
-from .serializers import AccountSerializer, ItemSerializer, ItemAccountSerializer, AccessTokenRequestSerializer, \
+from .serializers import ItemAccountSerializer, AccessTokenRequestSerializer, \
     ItemTransactionSerializer, TransactionDetailSerializer
 from .tasks import fetch_item_meta_data, fetch_item_account_data, delete_transactions, update_transactions
 
@@ -65,10 +65,17 @@ class AccountTransactionApiView(APIView):
             if items:
                 for item in items:
                     transactions_response = client.Transactions.get(item.access_token, start_date, end_date)
-                    transaction_serializer = TransactionDetailSerializer(many=True,
-                                                                         data=transactions_response['transactions'])
-                    transaction_serializer.is_valid(raise_exception=True)
-                    transaction_serializer.save()
+                    for transaction in transactions_response['transactions']:
+                        try:
+                            transaction_serializer = TransactionDetailSerializer(data=transaction)
+                            transaction_serializer.is_valid(raise_exception=True)
+                            transaction_serializer.save()
+                        except Exception:
+                            transaction_object = TransactionDetail.objects.get(
+                                transaction_id=transaction['transaction_id'])
+                            serializer = TransactionDetailSerializer(instance=transaction_object, data=transaction)
+                            serializer.is_valid(raise_exception=True)
+                            serializer.save()
         except plaid.errors.PlaidError as e:
             return Response(data={'error': e.message}, status=400)
         return Response(data={'message': 'Transaction data fetched.'}, status=201)
@@ -88,10 +95,10 @@ class TransactionsWebhook(APIView):
                 delete_transactions.delay(data['removed_transactions'])
             else:
                 new_transactions = data['new_transactions']
-                if new_transactions is not 0:
-                    update_transactions.delay(item_id, new_transactions)
-                else:
-                    print("No New Transactions")
+                # if new_transactions is not 0:
+                update_transactions.delay(item_id)
+                # else:
+                #     print("No New Transactions")
 
         return Response("Webhook received", status=status.HTTP_202_ACCEPTED)
 
@@ -118,7 +125,7 @@ class WebhookRegistrationView(APIView):
         item = Item.objects.filter(user=request.user)
         access_token = item[0].access_token
         try:
-            res = client.Item.webhook.update(access_token, webhook="https://b7ef0f04fb1a.ngrok.io/api/v1/item/webhook/transactions")
+            res = client.Item.webhook.update(access_token, webhook="https://671ea3cbf79b.ngrok.io/api/v1/item/webhook/transactions")
         except plaid.errors.PlaidError as e:
             print(e)
         print(res)
