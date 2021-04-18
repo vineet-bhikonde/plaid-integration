@@ -1,6 +1,7 @@
 import datetime
 
 import plaid
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,7 +10,7 @@ from item.models import Item, Account
 from plaid_integration.PlaidClient import PlaidClient
 from .serializers import AccountSerializer, ItemSerializer, ItemAccountSerializer, AccessTokenRequestSerializer, \
     ItemTransactionSerializer, TransactionDetailSerializer
-from .tasks import fetch_item_meta_data, fetch_item_account_data
+from .tasks import fetch_item_meta_data, fetch_item_account_data, delete_transactions, update_transactions
 
 client = PlaidClient.get_instance()
 
@@ -71,3 +72,54 @@ class AccountTransactionApiView(APIView):
         except plaid.errors.PlaidError as e:
             return Response(data={'error': e.message}, status=400)
         return Response(data={'message': 'Transaction data fetched.'}, status=201)
+
+
+class TransactionsWebhook(APIView):
+
+    def post(self, request):
+        data = request.data
+
+        webhook_type = data['webhook_type']
+        webhook_code = data['webhook_code']
+
+        if webhook_type == 'TRANSACTIONS':
+            item_id = data['item_id']
+            if webhook_code == 'TRANSACTIONS_REMOVED':
+                delete_transactions.delay(data['removed_transactions'])
+            else:
+                new_transactions = data['new_transactions']
+                if new_transactions is not 0:
+                    update_transactions.delay(item_id, new_transactions)
+                else:
+                    print("No New Transactions")
+
+        return Response("Webhook received", status=status.HTTP_202_ACCEPTED)
+
+
+class WebhookTestView(APIView):
+
+    permission_classes = (IsAuthenticated, )
+
+    def get(self, request):
+        item = Item.objects.filter(user=request.user)
+        access_token = item[0].access_token
+
+        # fire a DEFAULT_UPDATE webhook for an item
+        res = client.Sandbox.item.fire_webhook(access_token, 'DEFAULT_UPDATE')
+
+        print("Webhook fired: ", res['webhook_fired'])
+
+        return Response({"message": "Webhook fired"}, status=status.HTTP_200_OK)
+
+
+class WebhookRegistrationView(APIView):
+
+    def post(self, request):
+        item = Item.objects.filter(user=request.user)
+        access_token = item[0].access_token
+        try:
+            res = client.Item.webhook.update(access_token, webhook="https://b7ef0f04fb1a.ngrok.io/api/v1/item/webhook/transactions")
+        except plaid.errors.PlaidError as e:
+            print(e)
+        print(res)
+        return Response({'message':'Webhook registered'}, status=status.HTTP_201_CREATED)

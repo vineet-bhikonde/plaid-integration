@@ -1,7 +1,9 @@
+import datetime
+
 import plaid
 from celery import shared_task
 
-from item.models import Item, AvailableProduct, BilledProduct
+from item.models import Item, AvailableProduct, BilledProduct, TransactionDetail
 from item.serializers import AccountSerializer
 from plaid_integration.PlaidClient import PlaidClient
 
@@ -34,3 +36,17 @@ def fetch_item_account_data(item):
     else:
         print(serializer.errors)
     return
+
+
+@shared_task
+def delete_transactions(deleted_transactions):
+
+    for transaction_id in deleted_transactions:
+        TransactionDetail.objects.filter(transaction_id=transaction_id).delete()
+
+    return "Transactions Deleted"
+
+
+@shared_task
+def update_transactions(item_id, updated_transactions):
+    pass
