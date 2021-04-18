@@ -94,11 +94,10 @@ class TransactionsWebhook(APIView):
             if webhook_code == 'TRANSACTIONS_REMOVED':
                 delete_transactions.delay(data['removed_transactions'])
             else:
-                new_transactions = data['new_transactions']
-                # if new_transactions is not 0:
-                update_transactions.delay(item_id)
-                # else:
-                #     print("No New Transactions")
+                if data['new_transactions'] is not 0:
+                    update_transactions.delay(item_id)
+                else:
+                    print("No New Transactions")
 
         return Response("Webhook received", status=status.HTTP_202_ACCEPTED)
 
@@ -111,7 +110,6 @@ class WebhookTestView(APIView):
         item = Item.objects.filter(user=request.user)
         access_token = item[0].access_token
 
-        # fire a DEFAULT_UPDATE webhook for an item
         res = client.Sandbox.item.fire_webhook(access_token, 'DEFAULT_UPDATE')
 
         print("Webhook fired: ", res['webhook_fired'])
@@ -122,11 +120,12 @@ class WebhookTestView(APIView):
 class WebhookRegistrationView(APIView):
 
     def post(self, request):
+        base_url = request.data['base_url']
+        # For ease first item of the user is considered for registering
         item = Item.objects.filter(user=request.user)
         access_token = item[0].access_token
         try:
-            res = client.Item.webhook.update(access_token, webhook="https://671ea3cbf79b.ngrok.io/api/v1/item/webhook/transactions")
+            res = client.Item.webhook.update(access_token, webhook=base_url + "/api/v1/item/webhook/transactions")
         except plaid.errors.PlaidError as e:
-            print(e)
-        print(res)
-        return Response({'message':'Webhook registered'}, status=status.HTTP_201_CREATED)
+            Response({'error': 'Failed to register webhook'})
+        return Response({'message': 'Webhook registered'}, status=status.HTTP_201_CREATED)
