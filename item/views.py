@@ -1,6 +1,7 @@
 import datetime
 
 import plaid
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -9,8 +10,9 @@ from rest_framework.views import APIView
 from item.models import Item, Account, TransactionDetail
 from plaid_integration.PlaidClient import PlaidClient
 from .serializers import ItemAccountSerializer, AccessTokenRequestSerializer, \
-    ItemTransactionSerializer, TransactionDetailSerializer
-from .tasks import fetch_item_meta_data, fetch_item_account_data, delete_transactions, update_transactions
+    ItemTransactionSerializer, TransactionDetailSerializer, ItemSerializer
+from .tasks import fetch_item_meta_data, fetch_item_account_data, delete_transactions, \
+    insert_or_update_transactions
 
 client = PlaidClient.get_instance()
 
@@ -42,7 +44,7 @@ class AccountApiView(APIView):
     def get(self, request):
         item = Item.objects.filter(user=request.user)
         if not item:
-            return Response(data={'error': 'No Items available.'}, status=400)
+            return Response(data={'error': 'No Items available.'}, status=status.HTTP_400_BAD_REQUEST)
         serializer = ItemAccountSerializer(item, many=True)
         return Response(serializer.data)
 
@@ -53,36 +55,25 @@ class AccountTransactionApiView(APIView):
     def get(self, request):
         item = Item.objects.filter(user=request.user)
         if not item:
-            return Response(data={'error': 'No Items available to display transactions.'}, status=400)
+            return Response(data={'error': 'No Items available to display transactions.'}, status=status.HTTP_400_BAD_REQUEST)
         serializer = ItemTransactionSerializer(item, many=True)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+    @transaction.atomic
     def post(self, request):
-        start_date = '{:%Y-%m-%d}'.format(datetime.datetime.now() + datetime.timedelta(-15))
-        end_date = '{:%Y-%m-%d}'.format(datetime.datetime.now())
-        try:
-            items = Item.objects.filter(user=request.user)
-            if items:
-                for item in items:
-                    transactions_response = client.Transactions.get(item.access_token, start_date, end_date)
-                    for transaction in transactions_response['transactions']:
-                        try:
-                            transaction_serializer = TransactionDetailSerializer(data=transaction)
-                            transaction_serializer.is_valid(raise_exception=True)
-                            transaction_serializer.save()
-                        except Exception:
-                            transaction_object = TransactionDetail.objects.get(
-                                transaction_id=transaction['transaction_id'])
-                            serializer = TransactionDetailSerializer(instance=transaction_object, data=transaction)
-                            serializer.is_valid(raise_exception=True)
-                            serializer.save()
-        except plaid.errors.PlaidError as e:
-            return Response(data={'error': e.message}, status=400)
-        return Response(data={'message': 'Transaction data fetched.'}, status=201)
+        items = Item.objects.filter(user=request.user)
+        if items:
+            item_serializer = ItemSerializer(many=True, data=items)
+            item_serializer.is_valid()
+            insert_or_update_transactions.delay(item_serializer.data)
+        else:
+            return Response(data={'error': 'No items for fetching transactions.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(data={'message': 'Fetching transaction data.'}, status=status.HTTP_201_CREATED)
 
 
 class TransactionsWebhook(APIView):
 
+    @transaction.atomic
     def post(self, request):
         data = request.data
 
@@ -95,7 +86,9 @@ class TransactionsWebhook(APIView):
                 delete_transactions.delay(data['removed_transactions'])
             else:
                 if data['new_transactions'] is not 0:
-                    update_transactions.delay(item_id)
+                    item_serializer = ItemSerializer(data=Item.objects.get(item=item_id))
+                    item_serializer.is_valid()
+                    insert_or_update_transactions.delay(item_serializer.data, True)
                 else:
                     print("No New Transactions")
 
